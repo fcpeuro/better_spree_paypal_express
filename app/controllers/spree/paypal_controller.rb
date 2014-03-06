@@ -1,5 +1,29 @@
 module Spree
   class PaypalController < StoreController
+
+    def notify
+      retrieve_details #need to retreive details first to ensure ActiveMerchant gets configured correctly.
+
+      @notification = ActiveMerchant::Billing::Integrations::Paypal::Notification.new(request.raw_post)
+
+      # we only care about eChecks (for now?)
+      if @notification.params["payment_type"] == "echeck" && @notification.acknowledge && @payment && @order.total >= @payment.amount
+        @payment.started_processing!
+        @payment.log_entries.create(:details => @notification.to_yaml)
+
+        case @notification.params["payment_status"]
+          when "Denied"
+            @payment.failure!
+
+          when "Completed"
+            @payment.complete!
+
+        end
+      end
+
+      render :nothing => true
+    end
+
     def express
       order = current_order || raise(ActiveRecord::RecordNotFound)
       items = order.line_items.map do |item|
@@ -91,6 +115,16 @@ module Spree
     end
 
     private
+    
+    def retrieve_details
+      @order = Spree::Order.find_by(:number => params["invoice"])
+
+      if @order
+        @payment = @order.payments.where(:state => "pending", :source_type => "Spree::PaypalExpressCheckout").first
+
+        @payment.try(:payment_method).try(:provider) #configures ActiveMerchant
+      end
+    end
 
     def payment_method
       Spree::PaymentMethod.find(params[:payment_method_id])
