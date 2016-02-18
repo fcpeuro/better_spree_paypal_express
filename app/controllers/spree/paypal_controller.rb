@@ -120,7 +120,7 @@ module Spree
     end
 
     def express_checkout_request_details order, items
-      { :SetExpressCheckoutRequestDetails => {
+      ps = { :SetExpressCheckoutRequestDetails => {
           :InvoiceID => order.number,
           :BuyerEmail => order.email,
           :ReturnURL => confirm_paypal_url(:payment_method_id => params[:payment_method_id], :utm_nooverride => 1),
@@ -128,8 +128,11 @@ module Spree
           :SolutionType => payment_method.preferred_solution.present? ? payment_method.preferred_solution : "Mark",
           :LandingPage => payment_method.preferred_landing_page.present? ? payment_method.preferred_landing_page : "Billing",
           :cppheaderimage => payment_method.preferred_logourl.present? ? payment_method.preferred_logourl : "",
+          :AddressOverride => '1',
           :PaymentDetails => [payment_details(items)]
       }}
+puts ps.inspect
+      ps
     end
 
     def payment_method
@@ -177,7 +180,7 @@ module Spree
             :currencyID => current_order.currency,
             :value => current_order.additional_tax_total
           },
-          :ShipToAddress => address_options,
+          :ShipToAddress => address_options('shipping'),
           :PaymentDetailsItem => items,
           :ShippingMethod => "Shipping Method Name Goes Here",
           :PaymentAction => "Sale"
@@ -185,18 +188,17 @@ module Spree
       end
     end
 
-    def address_options
-      return {} unless address_required?
-
+    def address_options(type = 'billing')
+      address = (type == 'billing') ? current_order.bill_address : current_order.ship_address
       {
-          :Name => current_order.bill_address.try(:full_name),
-          :Street1 => current_order.bill_address.address1,
-          :Street2 => current_order.bill_address.address2,
-          :CityName => current_order.bill_address.city,
-          :Phone => current_order.bill_address.phone,
-          :StateOrProvince => current_order.bill_address.state_text,
-          :Country => current_order.bill_address.country.iso,
-          :PostalCode => current_order.bill_address.zipcode
+          :Name => address.try(:full_name),
+          :Street1 => address.address1,
+          :Street2 => address.address2,
+          :CityName => address.city,
+          :Phone => address.phone,
+          :StateOrProvince => address.state_text,
+          :Country => address.country.iso,
+          :PostalCode => address.zipcode
       }
     end
 
